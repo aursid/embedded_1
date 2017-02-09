@@ -1,0 +1,11 @@
+how to load a python file onto the esp8266
+
+open cmd
+cd Desktop/github programs/embedded systems
+ampy --port COM5 put helloworld.py
+
+//helloworld is python code stored in the embedded systems folder
+
+//do this to see the files on the board
+cd Desktop/github programs/embedded systems
+ampy --port COM5 ls

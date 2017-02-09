@@ -1,0 +1,4 @@
+go to cmd
+
+cd Desktop/github programs/embedded systems
+ampy --port COM5 run hello.py

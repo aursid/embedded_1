@@ -1,0 +1,13 @@
+how to connect the ESP8266 to windows:
+
+start cmd
+putty
+
+//note: the port can change every time
+//to check port, go to Device Manager
+
+//on putty:
+switch to serial
+enter the port
+change the baud rate to 115200 (works with 115800 as well)
+
