@@ -76,12 +76,13 @@ rtc = machine.RTC()
 
 rtc.datetime((year,month,day,hour,minute,second,0,0))
 
-
 print(disp_date_time)
 
 if(len(time_python) > 0):
     led.high()
 
+
+sta_if.active(False)
 #Find out which sensor is connected to the NodeMCU
 i2c = I2C(scl = Pin(5),sda = Pin(4),freq = 500000)
 addr_list = i2c.scan() #for switch control.
@@ -173,10 +174,11 @@ countZ = 0
 nLargestXValues = []
 nLargestYValues = []
 nLargestZValues = []
+nLargestXValues_time = []
+nLargestYValues_time = []
+nLargestZValues_time = []
 
 while(len(addr_list) > 0):
-#c = 0
-#while(c < 100):
 
     firstXvalue = normalise(i2c.readfrom_mem(addr,OUT_X_L,1), i2c.readfrom_mem(addr,OUT_X_H,1), divider)
     firstYvalue = normalise(i2c.readfrom_mem(addr,OUT_Y_L,1), i2c.readfrom_mem(addr,OUT_Y_H,1), divider)
@@ -189,6 +191,8 @@ while(len(addr_list) > 0):
     diffX = abs(secondXvalue - firstXvalue)
     diffY = abs(secondYvalue - firstYvalue)
     diffZ = abs(secondZvalue - firstZvalue)
+
+
 
     if(diffX > THRESHOLD):
         if(countX > N_LARGEST_VALUES - 1):
@@ -220,14 +224,12 @@ while(len(addr_list) > 0):
             nLargestZValues.sort()
             countZ += 1
 
-    #print('in while loop')
-    #if(len(addr_list) == 0):
-    #   break
     time.sleep(0.05)
-    addr_list = i2c.scan()
-    #c += 1
+    addr_list = i2c.scan() #keep on scanning to violate while loop condition
+
+    
 #when switch is turned off, put these nLargestX,Y,ZValues data structures onto the broker
-print(nLargestXValues,nLargestYValues,nLargestZValues)
+
 
 #code fine till here 14/2/17 1:36 pm
 
@@ -246,9 +248,20 @@ print(acc_data)
 
 #code fine till here 14/2/17 1:59 PM
 
-#---------------The dictionary for the acceleration values.---------------------
+#--------------------Connect to the EEERover again------------------------------
+#Code working fine till here 3:50 PM
+
+sta_if.active(True)
+
+sta_if.connect('EEERover','exhibition')
+while(not sta_if.isconnected()):
+    pass
+time.sleep(0.5)
+
+client = MQTTClient('unnamed1','192.168.0.10')
+client.connect()
 payload = json.dumps(acc_data)
 
 #Send acceleration and time data to the broker
-#client.publish('/unnamed1/test',bytes(payload, 'utf-8'))
+
 client.publish('/unnamed1/test',bytes(payload, 'utf-8'))
