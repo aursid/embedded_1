@@ -6,7 +6,7 @@ import time
 from machine import Pin,I2C,RTC
 
 THRESHOLD = 0.05
-N_LARGEST_VALUES = 10
+N_LARGEST_VALUES = 3
 
 #---------Declaring the registers to read data from or write data to.-----------
 
@@ -35,10 +35,23 @@ def sub_cb(topic,msg):
     stott_time = str(msg,'utf-8')
     currenttime.update_time(stott_time)
 
-
-def display_date_time(year,month,day,hour,minute,second):
-    date_str = ("%d:%d:%d %d/%d/%d" %(hour,minute,second,day,month,year))
+def display_date_time(year,month,day,weekday,hour,minute,second):
+    date_str = ("%d:%d:%d %d %d/%d/%d" %(hour,minute,second,weekday,day,month,year))
     return date_str
+
+def display_date_time_tuple(timetuple):
+
+    date_string = ("%d:%d:%d %d/%d/%d" %(timetuple[4],timetuple[5],timetuple[6],timetuple[2],timetuple[1],timetuple[0]))
+    return date_string
+
+def minimum1(nLargestValues):
+    minValueIndex = 0
+    minValue = nLargestValues[0]
+    for i in range (0, len(nLargestValues)):
+        if(nLargestValues[i] < minValue):
+            minValue = nLargestValues[i]
+            minValueIndex = i
+    return minValueIndex
 
 #----------Functions to perform conversion/standardisation----------------------
 
@@ -63,29 +76,6 @@ def normalise(l, h, divider):
 
     return normalised_acc
 
-#----------Functions to store the mishandled instances----------------------
-
-def minimum1(nLargestValues):
-    minValueIndex = 0
-    minValue = nLargestValues[0]
-    for i in range (0, len(nLargestValues)):
-        if(nLargestValues[i] < minValue):
-            minValue = nLargestValues[i]
-            minValueIndex = i
-    return minValueIndex
-
-def storeMishandledInstances(diff, nLargestValues, nLargestValues_time, count):
-    if(diff > THRESHOLD):
-        if(count > N_LARGEST_VALUES - 1):
-            index = minimum1(nLargestValues)
-            if(diff > nLargestValues[index]):
-                nLargestValues[index] = diff
-                nLargestValues_time[index] = rtc.datetime()
-        else:
-            nLargestValues.append(diff)
-            nLargestValues_time.append(rtc.datetime())
-            count += 1
-           
 #Setting up the LED for control
 led = machine.Pin(16,machine.Pin.OUT)
 led.low()
@@ -129,13 +119,12 @@ day = int(time_right_now[8:10])
 hour = int(time_right_now[11:13])
 minute = int(time_right_now[14:16])
 second = int(time_right_now[17:19])
-
-disp_date_time = display_date_time(year,month,day,hour,minute,second)
+weekday = 4
 
 rtc = machine.RTC()
 
-rtc.datetime((year,month,day,hour,minute,second,0,0))
-
+rtc.datetime((year,month,day,weekday,hour,minute,second,0))
+print(rtc.datetime())
 
 sta_if.active(False)
 
@@ -210,16 +199,56 @@ while(len(addr_list) > 0):
     secondYvalue = normalise(i2c.readfrom_mem(addr,OUT_Y_L,1), i2c.readfrom_mem(addr,OUT_Y_H,1), divider)
     secondZvalue = normalise(i2c.readfrom_mem(addr,OUT_Z_L,1), i2c.readfrom_mem(addr,OUT_Z_H,1), divider)
 
-    storeMishandledInstances(abs(secondXvalue - firstXvalue), nLargestXValues, nLargestXValues_time, countX)
-    storeMishandledInstances(abs(secondYvalue - firstYvalue), nLargestYValues, nLargestYValues_time, countY)
-    storeMishandledInstances(abs(secondZvalue - firstZvalue), nLargestZValues, nLargestZValues_time, countZ)
+    diffX = abs(secondXvalue - firstXvalue)
+    diffY = abs(secondYvalue - firstYvalue)
+    diffZ = abs(secondZvalue - firstZvalue)
 
-    time.sleep(0.01)
+    if(diffX > THRESHOLD):
+        if(countX > N_LARGEST_VALUES - 1):
+            indexX = minimum1(nLargestXValues)
+            if(diffX > nLargestXValues[indexX]):
+                nLargestXValues[indexX] = diffX
+                nLargestXValues_time[indexX] = rtc.datetime()
+        else:
+            nLargestXValues.append(diffX)
+            nLargestXValues_time.append(rtc.datetime())
+            countX += 1
+
+    if(diffY > THRESHOLD):
+        if(countY > N_LARGEST_VALUES - 1):
+            indexY = minimum1(nLargestYValues)
+            if(diffY > nLargestYValues[indexY]):
+                nLargestYValues[indexY] = diffY
+                nLargestYValues_time[indexY] = rtc.datetime()
+        else:
+            nLargestYValues.append(diffY)
+            nLargestYValues_time.append(rtc.datetime())
+            countY += 1
+
+    if(diffZ > THRESHOLD):
+        if(countZ > N_LARGEST_VALUES - 1):
+            indexZ = minimum1(nLargestZValues)
+            if(diffZ > nLargestZValues[indexZ]):
+                nLargestZValues[indexZ] = diffZ
+                nLargestZValues_time[indexZ] = rtc.datetime()
+        else:
+            nLargestZValues.append(diffZ)
+            nLargestZValues_time.append(rtc.datetime())
+            countZ += 1
+
+    #print('in while loop')
+    #if(len(addr_list) == 0):
+    #   break
+    time.sleep(0.5)
     addr_list = i2c.scan()
 
 #when switch is turned off, put these nLargestX,Y,ZValues data structures onto the broker
 print(nLargestXValues,nLargestYValues,nLargestZValues)
 print(nLargestXValues_time,nLargestYValues_time,nLargestZValues_time)
+
+#display_date_time_tuple(rtc.datetime())
+
+
 #------------Network Management and JSON display formatting---------------------
 #-----------------Convert to appropriate display format.------------------------
 #puts g in front of the number and puts them in a string like form.
@@ -227,10 +256,14 @@ x = 'g '.join(map(str,nLargestXValues))
 y = 'g '.join(map(str,nLargestYValues))
 z = 'g '.join(map(str,nLargestZValues))
 
-x_acc = "Largest 10 x acceleration values: " + x
-y_acc = "Largest 10 y acceleration values: " + y
-z_acc = "Largest 10 z acceleration values: " + z
+x_acc = "Largest 3 x acceleration values: " + x
+y_acc = "Largest 3 y acceleration values: " + y
+z_acc = "Largest 3 z acceleration values: " + z
 acc_data = [x_acc,y_acc,z_acc]
+
+a = []
+for k in range(0, len(nLargestXValues_time)):
+    print(display_date_time_tuple(nLargestXValues_time[k]))
 
 #--------------------Connect to the EEERover again------------------------------
 sta_if.active(True)
