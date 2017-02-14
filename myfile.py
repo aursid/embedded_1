@@ -4,10 +4,16 @@ import network
 from umqtt.simple import MQTTClient
 import machine
 import time
+import math
 from machine import Pin,I2C
 
 i2c = I2C(scl = Pin(5),sda = Pin(4),freq = 500000)
 addr = i2c.scan()[0]
+
+#Setting thresholdS
+
+THRESHOLD = 1
+N_LARGEST_VALUES = 10
 
 #---------Declaring the registers to read data from or write data to.-----------
 
@@ -60,44 +66,72 @@ if (get_range == 1): divider = 8190
 if (get_range == 0): divider = 16380
 
 #-------------------Collecting Raw Data from the sensor-------------------------
-# X acceleration
-x_acc_l = i2c.readfrom_mem(addr,OUT_X_L,1)
-x_acc_h = i2c.readfrom_mem(addr,OUT_X_H,1)
+#ensure that FIFO Bypass mode is enabled
 
-x_acc_l_ord = ord(x_acc_l)
-x_acc_h_ord = ord(x_acc_h)
+def normalise(l, h, divider):
+    
+    acc_l_ord = ord(x_acc_l)
+    acc_h_ord = ord(x_acc_h)
 
-x_acceleration = raw_acceleration(x_acc_h_ord,x_acc_l_ord)
-x_acceleration_signed = twos_comp(x_acceleration, 16)
+    acceleration = raw_acceleration(acc_h_ord, acc_l_ord)
+    acceleration_signed = twos_comp(acceleration, 16)
 
-normalised_x_acc  = x_acceleration_signed / divider
+    normalised_acc  = acceleration_signed / divider    
 
-# Y acceleration
-y_acc_l = i2c.readfrom_mem(addr,OUT_Y_L,1)
-y_acc_h = i2c.readfrom_mem(addr,OUT_Y_H,1)
+    return normalised_acc
 
-y_acc_l_ord = ord(y_acc_l)
-y_acc_h_ord = ord(y_acc_h)
-#y_acc_h_ord = 128
+while(switch is on):
+    
+    firstXvalue = normalise(i2c.readfrom_mem(addr,OUT_X_L,1), i2c.readfrom_mem(addr,OUT_X_H,1), divider)
+    firstYvalue = normalise(i2c.readfrom_mem(addr,OUT_Y_L,1), i2c.readfrom_mem(addr,OUT_Y_H,1), divider)
+    firstZvalue = normalise(i2c.readfrom_mem(addr,OUT_Z_L,1), i2c.readfrom_mem(addr,OUT_Z_H,1), divider)
 
-y_acceleration = raw_acceleration(y_acc_h_ord,y_acc_l_ord)
-y_acceleration_signed = twos_comp(y_acceleration, 16)
+    secondXvalue = normalise(i2c.readfrom_mem(addr,OUT_X_L,1), i2c.readfrom_mem(addr,OUT_X_H,1), divider)
+    secondYvalue = normalise(i2c.readfrom_mem(addr,OUT_Y_L,1), i2c.readfrom_mem(addr,OUT_Y_H,1), divider)
+    secondZvalue = normalise(i2c.readfrom_mem(addr,OUT_Z_L,1), i2c.readfrom_mem(addr,OUT_Z_H,1), divider)
 
-normalised_y_acc  = y_acceleration_signed / divider
+    diffX = abs(secondXvalue - firstXvalue)
+    diffY = abs(secondYvalue - firstYvalue)
+    diffZ = abs(secondZvalue - firstZvalue)
 
-# Z acceleration
-z_acc_l = i2c.readfrom_mem(addr,OUT_Z_L,1)
-z_acc_h = i2c.readfrom_mem(addr,OUT_Z_H,1)
+    countX = 0
+    countY = 0
+    countZ = 0
+    nLargestXValues = [0]*N_LARGEST_VALUES
+    nLargestYValues = [0]*N_LARGEST_VALUES
+    nLargestZValues = [0]*N_LARGEST_VALUES
 
-z_acc_l_ord = ord(z_acc_l)
-z_acc_h_ord = ord(z_acc_h)
-#z_acc_h_ord = 128
+    if(diffX > THRESHOLD):
+        if(countX > N_LARGEST_VALUES - 1):
+            if(diffX > nLargestXValues[0]):
+                nLargestXValues[0] = diffX
+                nLargestXValues.sort()
+        else:
+            nLargestXValues.append(diffX)
+            nLargestXValues.sort()
+            countX += 1
+    
+    if(diffY > THRESHOLD):
+        if(countY > N_LARGEST_VALUES - 1):
+            if(diffY > nLargestYValues[0]):
+                nLargestYValues[0] = diffY
+                nLargestYValues.sort()
+        else:
+            nLargestYValues.append(diffY)
+            nLargestYValues.sort()
+            countY += 1
 
-z_acceleration = raw_acceleration(z_acc_h_ord,z_acc_l_ord)
-z_acceleration_signed = twos_comp(z_acceleration, 16)
+    if(diffZ > THRESHOLD):
+        if(countZ > N_LARGEST_VALUES - 1):
+            if(diffZ > nLargestZValues[0]):
+                nLargestZValues[0] = diffZ
+                nLargestZValues.sort()
+        else:
+            nLargestZValues.append(diffZ)
+            nLargestZValues.sort()
+            countZ += 1         
 
-normalised_z_acc  = z_acceleration_signed / divider
-
+#when switch is turned off, put these nLargestX,Y,ZValues data structures onto the broker
 
 #------------Network Management and JSON display formatting---------------------
 #-----------------Convert to appropriate display format.------------------------
@@ -169,6 +203,14 @@ payload = json.dumps(acc_data)
 
 client.publish('/unnamed1/test',bytes(payload, 'utf-8'))
 
+#create a file
 
+#f = open('data.txt', 'w')
+#f.write('some data')
+#f.close()
+
+g = open('data.txt')
+print(g.read())
+g.close()
 
 #topic for time, esys\time
